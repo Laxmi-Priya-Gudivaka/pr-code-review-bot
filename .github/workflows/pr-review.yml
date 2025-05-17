@@ -1,28 +1,25 @@
 name: PR Code Review
-
 on:
   pull_request:
     types: [opened, synchronize]
 
+permissions:            # give the job what it needs
+  pull-requests: write   # lets us post PR comments
+  contents: read
+
 jobs:
   review:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
-      - name: Install dependencies
-        run: pip install PyGithub
+      - run: pip install PyGithub
 
-      - name: Run code review script
+      - name: Run review script
+        run: python .github/scripts/code_review.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_REF: ${{ github.ref }}
-        run: python .github/scripts/code_review.py
