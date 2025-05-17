@@ -1,67 +1,46 @@
 #!/usr/bin/env python3
 """
-Automated PR review:
-  – Flags 'System.out.println' in changed Java files.
-  – Requests changes and fails the workflow when a violation is found.
+CI code review:
+– Adds inline comments on 'System.out.println' in .java files.
+– Fails the job if such patterns are found.
 """
 
 import os, json, sys
 from github import Github
 
-# ---------------------------------------------------------------------------
-# 1. authenticate
-# ---------------------------------------------------------------------------
-token = os.getenv("GITHUB_TOKEN")
-gh = Github(token)
+gh = Github(os.getenv("GITHUB_TOKEN"))
 
-# ---------------------------------------------------------------------------
-# 2. get repo + PR info from event payload
-# ---------------------------------------------------------------------------
-with open(os.getenv("GITHUB_EVENT_PATH"), encoding="utf-8") as f:
+# Get PR number from event
+with open(os.getenv("GITHUB_EVENT_PATH")) as f:
     event = json.load(f)
 
 repo_name = os.getenv("GITHUB_REPOSITORY")
-pr_number = event["pull_request"]["number"]
-
 repo = gh.get_repo(repo_name)
-pr   = repo.get_pull(pr_number)
+pr_number = event["pull_request"]["number"]
+pr = repo.get_pull(pr_number)
 
-print(f"Reviewing PR #{pr_number} in {repo_name}")
+print(f"Reviewing PR #{pr.number}")
 
-# ---------------------------------------------------------------------------
-# 3. scan diff for violations
-# ---------------------------------------------------------------------------
-review_comments = []
+violations = []
 
-for file in pr.get_files():
-    if not file.filename.endswith(".java"):
-        continue
+# Check changed files
+for f in pr.get_files():
+    if f.filename.endswith(".java") and "System.out.println" in (f.patch or ""):
+        print(f"Issue found in {f.filename}")
+        violations.append({
+            "path": f.filename,
+            "body": "⚠️ Avoid `System.out.println`; use a logger instead.",
+            "position": 1  # You can refine this to exact line later
+        })
 
-    patch = file.patch or ""
-    if "System.out.println" in patch:
-        review_comments.append(
-            {
-                "path": file.filename,
-                "line": 1,           # demo line; refine later
-                "side": "RIGHT",
-                "body": (
-                    "⚠️ **Avoid `System.out.println`.** "
-                    "Use a proper logging framework instead."
-                ),
-            }
-        )
+# Post inline comments
+for v in violations:
+    pr.create_review_comment(**v)
+    print(f"Commented on {v['path']}")
 
-# ---------------------------------------------------------------------------
-# 4. post review & set exit status
-# ---------------------------------------------------------------------------
-if review_comments:
-    pr.create_review(
-        body="Automated review found issues.",
-        event="REQUEST_CHANGES",
-        comments=review_comments
-        # commit param omitted → default head commit is used
-    )
-    print(f"Posted {len(review_comments)} comment(s); requested changes.")
-    sys.exit(1)          # make the workflow fail
+# Fail job if any comments were made
+if violations:
+    print("Violations found — failing job.")
+    sys.exit(1)
 else:
-    print("No issues detected.")
+    print("No issues found.")
