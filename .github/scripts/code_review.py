@@ -2,7 +2,6 @@ import os
 import sys
 from github import Github
 import json
-
 from openai import OpenAI
 
 
