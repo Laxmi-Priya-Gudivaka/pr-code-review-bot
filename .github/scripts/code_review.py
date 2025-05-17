@@ -1,80 +1,67 @@
 #!/usr/bin/env python3
 """
-Simple automated PR code-review script.
-
-Current rule:
-  • For every changed Java file (.java) in the pull request diff,
-    warn if the diff contains the text 'System.out.println'.
+Automated PR review: warns about 'System.out.println' in Java files.
+Workflow fails (exit code 1) if any warning is posted.
 """
 
-import os
-import json
+import os, json, sys
 from github import Github
 
 # ---------------------------------------------------------------------------
-# 1) Authenticate to GitHub
+# 1. authenticate
 # ---------------------------------------------------------------------------
 token = os.getenv("GITHUB_TOKEN")
-if not token:
-    raise RuntimeError("GITHUB_TOKEN not found in environment")
-
 gh = Github(token)
 
 # ---------------------------------------------------------------------------
-# 2) Read event payload to get repo + PR number
-#    (more reliable than parsing GITHUB_REF)
+# 2. get repo + PR number from event payload
 # ---------------------------------------------------------------------------
-event_path = os.getenv("GITHUB_EVENT_PATH")
-if not event_path:
-    raise RuntimeError("GITHUB_EVENT_PATH not found")
-
-with open(event_path, "r", encoding="utf-8") as fp:
+with open(os.getenv("GITHUB_EVENT_PATH"), encoding="utf-8") as fp:
     event = json.load(fp)
 
-pr_number = event["pull_request"]["number"]              # int
-repo_name = os.getenv("GITHUB_REPOSITORY")               # e.g. user/repo
+repo_name = os.getenv("GITHUB_REPOSITORY")
+pr_number = event["pull_request"]["number"]
 
 repo = gh.get_repo(repo_name)
-pr = repo.get_pull(pr_number)
+pr   = repo.get_pull(pr_number)
+head_sha = pr.head.sha  # needed for inline review comments
 
 print(f"Reviewing PR #{pr_number} in {repo_name}")
 
 # ---------------------------------------------------------------------------
-# 3) Analyse changed files
+# 3. scan changed files
 # ---------------------------------------------------------------------------
-comments_to_post = []
+review_comments = []   # will be fed to create_review()
 
 for file in pr.get_files():
-    # Only look at Java source files
     if not file.filename.endswith(".java"):
         continue
 
-    patch = file.patch or ""     # diff hunks as a single string
+    patch = file.patch or ""
     if "System.out.println" in patch:
-        # NOTE: 'position' is the line index *in the diff*, 1-based.
-        # For a demo we use position=1.  For production you would parse
-        # 'patch' to locate the exact hunk/line containing the offence.
-        comments_to_post.append(
+        review_comments.append(
             {
                 "path": file.filename,
-                "position": 1,
+                "line": 1,           # demo ⇒ first line; refine later
+                "side": "RIGHT",     # comment on the new code
                 "body": (
-                    "⚠️ **Avoid using `System.out.println`.** "
-                    "Please use a logging framework (e.g., `java.util.logging`, "
-                    "`slf4j`, `Log4j`) instead."
+                    "⚠️ **Avoid `System.out.println`.** "
+                    "Use a logging framework such as SLF4J or Log4j."
                 ),
             }
         )
 
 # ---------------------------------------------------------------------------
-# 4) Post inline review comments
+# 4. post review (if needed)
 # ---------------------------------------------------------------------------
-if comments_to_post:
-    for comment in comments_to_post:
-        try:
-            pr.create_review_comment(**comment)
-            print(f"Commented on {comment['path']}")
-        except Exception as exc:
-            print(f"Failed to post comment on {comment['path']}: {exc}")
+if review_comments:
+    pr.create_review(
+        body="Automated review found issues.",
+        event="REQUEST_CHANGES",
+        comments=review_comments,
+        commit=head_sha,
+    )
+    print(f"Posted {len(review_comments)} comment(s) and requested changes.")
+    sys.exit(1)   # make the workflow fail
 else:
-    print("No issues found – no comments posted.")
+    print("No issues detected.")
