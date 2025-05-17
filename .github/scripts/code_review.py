@@ -43,8 +43,10 @@
 import os
 import sys
 from github import Github
-import openai
 import json
+
+from openai import OpenAI
+client = OpenAI()
 
 def main():
     # Read environment variables
@@ -54,41 +56,39 @@ def main():
     github_token = os.getenv("GITHUB_TOKEN")
 
     if not repo_name or not pr_number or not openrouter_api_key or not github_token:
-        print("Missing environment variables. Please set GITHUB_REPOSITORY, PR_NUMBER, OPENROUTER_API_KEY, and GITHUB_TOKEN.")
+        print("Missing environment variables. Please set GITHUB_REPOSITORY, PR_NUMBER, GITHUB_TOKEN, and OPENROUTER_API_KEY.")
         return 1
 
     try:
         pr_number = int(pr_number)
     except ValueError:
-        print("PR_NUMBER environment variable must be an integer.")
+        print("PR_NUMBER must be an integer.")
         return 1
 
-    # Initialize GitHub and OpenAI clients
+    # Initialize GitHub client
     g = Github(github_token)
     repo = g.get_repo(repo_name)
     pr = repo.get_pull(pr_number)
 
-    # Read all changed files in the PR
+    # Initialize OpenAI client (OpenRouter)
+    client = OpenAI(api_key=openrouter_api_key)
+
     files = pr.get_files()
     issues_found = False
     comments = []
 
-    # Initialize OpenAI with OpenRouter endpoint and key
-    openai.api_base = "https://openrouter.ai/api/v1"
-    openai.api_key = openrouter_api_key
-
     for file in files:
         filename = file.filename
-        patch = file.patch  # This contains the diff
+        patch = file.patch  # diff data
 
         if not patch:
             continue
 
-        # For simplicity, check entire file content via the GitHub API
+        # Get full file content at PR HEAD commit
         file_contents = repo.get_contents(filename, ref=pr.head.ref)
         content_str = file_contents.decoded_content.decode()
 
-        # Prepare prompt for code review
+        # Prepare prompt for the code review model
         prompt = f"""
 You are a code review assistant. Review the following Java code for bad practices or issues.
 Give me a list of line numbers and messages for required changes.
@@ -100,19 +100,19 @@ Only reply in JSON format as a list of objects with "line" and "message" fields.
 """
 
         try:
-            response = openai.ChatCompletion.create(
-                model="openrouter/ggml-wizard-v1-q4_0",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=512,
-                temperature=0,
-            )
+            response = client.chat.completions.create(
+            model="openrouter/ggml-wizard-v1-q4_0",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=512,
+            temperature=0,
+)
             review_output = response.choices[0].message.content
             feedback = json.loads(review_output)
         except Exception as e:
             print(f"Error during OpenAI call or parsing response: {e}")
             return 1
 
-        # Add review comments based on feedback
+        # Add comments based on feedback
         for issue in feedback:
             issues_found = True
             comments.append({
@@ -122,7 +122,7 @@ Only reply in JSON format as a list of objects with "line" and "message" fields.
                 "body": issue["message"]
             })
 
-    # Create review on PR
+    # Create PR review
     if issues_found:
         pr.create_review(
             body="Automated review found issues. Please fix before merging.",
@@ -139,6 +139,6 @@ Only reply in JSON format as a list of objects with "line" and "message" fields.
         print("Review approved.")
         return 0
 
-
 if __name__ == "__main__":
     sys.exit(main())
+
