@@ -58,7 +58,7 @@ issue you find. Return an empty list if there are no issues.
 """
     try:
         resp = client.chat.completions.create(
-            model       = "openrouter/ggml-wizard-v1-q4_0",
+            model="gpt-3.5-turbo",
             messages    = [ {"role":"user","content":prompt} ],
             max_tokens  = 512,
             temperature = 0,
