@@ -4,7 +4,6 @@ from github import Github
 import json
 from openai import OpenAI
 
-
 def main():
     # Read environment variables
     repo_name = os.getenv("GITHUB_REPOSITORY")
