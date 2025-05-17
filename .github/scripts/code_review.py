@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Automated PR review: warns about 'System.out.println' in Java files.
-Workflow fails (exit code 1) if any warning is posted.
+Automated PR review:
+  – Flags 'System.out.println' in changed Java files.
+  – Requests changes and fails the workflow when a violation is found.
 """
 
 import os, json, sys
@@ -14,24 +15,23 @@ token = os.getenv("GITHUB_TOKEN")
 gh = Github(token)
 
 # ---------------------------------------------------------------------------
-# 2. get repo + PR number from event payload
+# 2. get repo + PR info from event payload
 # ---------------------------------------------------------------------------
-with open(os.getenv("GITHUB_EVENT_PATH"), encoding="utf-8") as fp:
-    event = json.load(fp)
+with open(os.getenv("GITHUB_EVENT_PATH"), encoding="utf-8") as f:
+    event = json.load(f)
 
 repo_name = os.getenv("GITHUB_REPOSITORY")
 pr_number = event["pull_request"]["number"]
 
 repo = gh.get_repo(repo_name)
 pr   = repo.get_pull(pr_number)
-head_sha = pr.head.sha  # needed for inline review comments
 
 print(f"Reviewing PR #{pr_number} in {repo_name}")
 
 # ---------------------------------------------------------------------------
-# 3. scan changed files
+# 3. scan diff for violations
 # ---------------------------------------------------------------------------
-review_comments = []   # will be fed to create_review()
+review_comments = []
 
 for file in pr.get_files():
     if not file.filename.endswith(".java"):
@@ -42,26 +42,26 @@ for file in pr.get_files():
         review_comments.append(
             {
                 "path": file.filename,
-                "line": 1,           # demo ⇒ first line; refine later
-                "side": "RIGHT",     # comment on the new code
+                "line": 1,           # demo line; refine later
+                "side": "RIGHT",
                 "body": (
                     "⚠️ **Avoid `System.out.println`.** "
-                    "Use a logging framework such as SLF4J or Log4j."
+                    "Use a proper logging framework instead."
                 ),
             }
         )
 
 # ---------------------------------------------------------------------------
-# 4. post review (if needed)
+# 4. post review & set exit status
 # ---------------------------------------------------------------------------
 if review_comments:
     pr.create_review(
         body="Automated review found issues.",
         event="REQUEST_CHANGES",
-        comments=review_comments,
-        commit=head_sha,
+        comments=review_comments
+        # commit param omitted → default head commit is used
     )
-    print(f"Posted {len(review_comments)} comment(s) and requested changes.")
-    sys.exit(1)   # make the workflow fail
+    print(f"Posted {len(review_comments)} comment(s); requested changes.")
+    sys.exit(1)          # make the workflow fail
 else:
     print("No issues detected.")
