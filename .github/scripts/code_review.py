@@ -1,46 +1,72 @@
-#!/usr/bin/env python3
-"""
-CI code review:
-– Adds inline comments on 'System.out.println' in .java files.
-– Fails the job if such patterns are found.
-"""
-
-import os, json, sys
+import os
 from github import Github
 
-gh = Github(os.getenv("GITHUB_TOKEN"))
+def get_pr_number():
+    # GITHUB_REF looks like: refs/pull/1/merge or refs/pull/1/head
+    ref = os.getenv("GITHUB_REF", "")
+    parts = ref.split('/')
+    if len(parts) >= 3 and parts[1] == 'pull':
+        pr_num = parts[2]
+        if pr_num.isdigit():
+            return int(pr_num)
+    raise ValueError("Could not parse PR number from GITHUB_REF")
 
-# Get PR number from event
-with open(os.getenv("GITHUB_EVENT_PATH")) as f:
-    event = json.load(f)
+def main():
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        print("GITHUB_TOKEN not found in environment")
+        return 1
 
-repo_name = os.getenv("GITHUB_REPOSITORY")
-repo = gh.get_repo(repo_name)
-pr_number = event["pull_request"]["number"]
-pr = repo.get_pull(pr_number)
+    repo_name = os.getenv("GITHUB_REPOSITORY")
+    if not repo_name:
+        print("GITHUB_REPOSITORY not found in environment")
+        return 1
 
-print(f"Reviewing PR #{pr.number}")
+    pr_number = get_pr_number()
 
-violations = []
+    g = Github(token)
+    repo = g.get_repo(repo_name)
+    pr = repo.get_pull(pr_number)
 
-# Check changed files
-for f in pr.get_files():
-    if f.filename.endswith(".java") and "System.out.println" in (f.patch or ""):
-        print(f"Issue found in {f.filename}")
-        violations.append({
-            "path": f.filename,
-            "body": "⚠️ Avoid `System.out.println`; use a logger instead.",
-            "position": 1  # You can refine this to exact line later
-        })
+    print(f"Reviewing PR #{pr_number}")
 
-# Post inline comments
-for v in violations:
-    pr.create_review_comment(**v)
-    print(f"Commented on {v['path']}")
+    comments = []
 
-# Fail job if any comments were made
-if violations:
-    print("Violations found — failing job.")
-    sys.exit(1)
-else:
-    print("No issues found.")
+    for file in pr.get_files():
+        if file.filename.endswith(".java"):
+            patch = file.patch
+            if patch and "System.out.println" in patch:
+                # Find position of offending line in the patch
+                lines = patch.split('\n')
+                position = None
+                for i, line in enumerate(lines):
+                    if "System.out.println" in line:
+                        position = i + 1  # GitHub API positions start at 1
+                        break
+
+                if position is not None:
+                    comments.append({
+                        "path": file.filename,
+                        "position": position,
+                        "body": "Avoid using System.out.println; use a logger instead."
+                    })
+                    print(f"Issue found in {file.filename}")
+
+    if comments:
+        pr.create_review(
+            body="Automated review found issues. Please fix before merging.",
+            event="REQUEST_CHANGES",
+            comments=comments
+        )
+        print("Requested changes in review. Blocking merge.")
+        return 1
+    else:
+        pr.create_review(
+            body="Automated review: No issues found. Approved.",
+            event="APPROVE"
+        )
+        print("No issues found. Approved.")
+        return 0
+
+if __name__ == "__main__":
+    exit(main())

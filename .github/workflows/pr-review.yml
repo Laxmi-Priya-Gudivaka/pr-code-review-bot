@@ -7,6 +7,7 @@ on:
 jobs:
   review:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -17,9 +18,11 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install requests PyGithub
+        run: pip install PyGithub
 
       - name: Run code review script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF: ${{ github.ref }}
         run: python .github/scripts/code_review.py
