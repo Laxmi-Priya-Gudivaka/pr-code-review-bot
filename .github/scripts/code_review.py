@@ -19,11 +19,11 @@ def main() -> int:
     repo_name = os.getenv("GITHUB_REPOSITORY")
     pr_number = os.getenv("PR_NUMBER")
     gh_token  = os.getenv("GITHUB_TOKEN")
-    or_key    = os.getenv("OPENROUTER_API_KEY")
+    or_key    = os.getenv("OPENROUTER_AI_API_KEY")
 
     if not all([repo_name, pr_number, gh_token, or_key]):
         print("❌ Missing environment variables "
-              "(GITHUB_REPOSITORY, PR_NUMBER, GITHUB_TOKEN, OPENROUTER_API_KEY)")
+              "(GITHUB_REPOSITORY, PR_NUMBER, GITHUB_TOKEN, OPENROUTER_AI_API_KEY)")
         return 1
 
     pr_number = int(pr_number)
