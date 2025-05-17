@@ -63,7 +63,10 @@ issue you find. Return an empty list if there are no issues.
             max_tokens  = 512,
             temperature = 0,
         )
-        feedback = json.loads(resp.choices[0].message.content)
+        # feedback = json.loads(resp.choices[0].message.content)
+        raw_output = resp.choices[0].message.content
+        print("Raw model output:", raw_output)  # <-- add this line to debug
+        feedback = json.loads(raw_output)
     except Exception as e:
         print(f"❌ OpenRouter call/parsing failed: {e}")
         return 1
