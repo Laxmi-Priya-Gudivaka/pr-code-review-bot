@@ -57,7 +57,7 @@ Only reply in JSON format as a list of objects with "line" and "message" fields.
 
         try:
             response = client.chat.completions.create(
-            model="openrouter/ggml-wizard-v1-q4_0",
+            model="gpt-4o-mini",        # or "gpt-4o", "gpt-3.5-turbo-1106", etc.
             messages=[{"role": "user", "content": prompt}],
             max_tokens=512,
             temperature=0,
