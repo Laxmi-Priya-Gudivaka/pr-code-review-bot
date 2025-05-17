@@ -46,13 +46,14 @@ from github import Github
 import json
 
 from openai import OpenAI
-client = OpenAI()
+
 
 def main():
     # Read environment variables
     repo_name = os.getenv("GITHUB_REPOSITORY")
     pr_number = os.getenv("PR_NUMBER")
     openrouter_api_key = os.getenv("OPENROUTER_AI_API_KEY")
+    client = OpenAI(openrouter_api_key)
     github_token = os.getenv("GITHUB_TOKEN")
 
     if not repo_name or not pr_number or not openrouter_api_key or not github_token:
