@@ -39,6 +39,9 @@ def main() -> int:
         base_url = "https://openrouter.ai/api/v1"
     )
 
+    issues_found = False
+    issues_by_file = {}
+
     comments, issues_found = [], False
 
     # iterate changed files
@@ -46,7 +49,12 @@ def main() -> int:
         if not f.patch or not f.filename.endswith(".java"):
             continue
 
-        file_content = repo.get_contents(f.filename, ref=pr.head.ref).decoded_content.decode()
+        try:
+            file_content_bytes = repo.get_contents(f.filename, ref=pr.head.ref).decoded_content
+            file_content = file_content_bytes.decode()
+        except Exception as e:
+            print(f"❌ Failed to fetch file content for {f.filename}: {e}")
+            continue
 
         prompt = f"""
 You are a strict Java code-review assistant. Review the code below and output
@@ -73,33 +81,31 @@ issue you find. Return an empty list if there are no issues.
         print("Raw model output:", raw_output)  # <-- add this line to debug
         feedback = json.loads(raw_output)
     except Exception as e:
-        print(f"❌ OpenRouter call/parsing failed: {e}")
+        print(f"❌ OpenRouter call/parsing failed for {f.filename}: {e}")
         return 1
-
-    for issue in feedback:
+    if feedback:
         issues_found = True
-        comments.append({
-            "path" : f.filename,
-            "line" : issue["line"],
-            "side" : "RIGHT",
-            "body" : issue["message"]
-        })
+        issues_by_file.setdefault(f.filename, []).extend(feedback)
 
     # create PR review
     if issues_found:
-        comment_body = "Automated review found issues:\n\n"
-        for c in comments:
-            comment_body += f"- File `{c['path']}`, line {c['line']}: {c['body']}\n"
+        # Build a single top-level comment listing all issues by file and line
+        comment_body = "🔴 **Automated review found issues:**\n\n"
+        for filename, issues in issues_by_file.items():
+            comment_body += f"**File: `{filename}`**\n"
+            for issue in issues:
+                comment_body += f"- Line {issue['line']}: {issue['message']}\n"
+            comment_body += "\n"
+        comment_body += "Please address these issues before merging."
 
-        # Post a single summary comment on the PR
         pr.create_issue_comment(comment_body)
-        print("🔴 Comment with issues posted.")
-        return 1  # fail workflow
-    else:
-        pr.create_issue_comment("✅ Automated review: no issues found.")
-        print("🟢 No issues found.")
-        return 0
+        print("🔴 Comment with issues posted – failing job.")
+        return 1
 
+    # No issues found: optionally post a positive comment or skip commenting
+    pr.create_issue_comment("✅ Automated review: no issues found.")
+    print("🟢 No issues found.")
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())
