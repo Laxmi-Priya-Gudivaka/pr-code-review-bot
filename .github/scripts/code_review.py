@@ -65,6 +65,11 @@ issue you find. Return an empty list if there are no issues.
         )
         # feedback = json.loads(resp.choices[0].message.content)
         raw_output = resp.choices[0].message.content
+        if raw_output.startswith("```"):
+            raw_output = "\n".join(raw_output.split("\n")[1:-1]).strip()
+
+        print("Raw model output after cleaning:", raw_output)
+        feedback = json.loads(raw_output)
         print("Raw model output:", raw_output)  # <-- add this line to debug
         feedback = json.loads(raw_output)
     except Exception as e:
