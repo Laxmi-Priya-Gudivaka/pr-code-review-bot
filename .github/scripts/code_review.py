@@ -2,7 +2,7 @@ import os
 import sys
 from github import Github
 import json
-from openai import OpenAI
+import openai
 
 def main():
     # Read environment variables
@@ -26,8 +26,8 @@ def main():
     repo = g.get_repo(repo_name)
     pr = repo.get_pull(pr_number)
 
-    # Initialize OpenAI client (OpenRouter)
-    client = OpenAI(api_key=openrouter_api_key)
+    openai.api_key = openrouter_api_key
+    openai.base_url = "https://openrouter.ai/api/v1"
 
     files = pr.get_files()
     issues_found = False
@@ -56,7 +56,7 @@ Only reply in JSON format as a list of objects with "line" and "message" fields.
 """
 
         try:
-            response = client.chat.completions.create(
+            response = openai.ChatCompletion.create(
             model="openrouter/ggml-wizard-v1-q4_0",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=512,
