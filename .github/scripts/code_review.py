@@ -87,17 +87,19 @@ issue you find. Return an empty list if there are no issues.
 
     # create PR review
     if issues_found:
-        pr.create_review(
-            body    = "Automated review found issues – please fix before merging.",
-            event   = "REQUEST_CHANGES",
-            comments= comments
-        )
-        print("🔴 Requested changes posted.")
-        return 1          # fail workflow
+        comment_body = "Automated review found issues:\n\n"
+        for c in comments:
+            comment_body += f"- File `{c['path']}`, line {c['line']}: {c['body']}\n"
+
+        # Post a single summary comment on the PR
+        pr.create_issue_comment(comment_body)
+        print("🔴 Comment with issues posted.")
+        return 1  # fail workflow
     else:
-        pr.create_review(body="✅ Automated review: no issues.", event="APPROVE")
+        pr.create_issue_comment("✅ Automated review: no issues found.")
         print("🟢 No issues found.")
         return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
