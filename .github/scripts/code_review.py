@@ -9,11 +9,13 @@ AI-powered PR code review (OpenRouter)
 • Fails the workflow (exit 1) when issues are found.
 """
 
-import os, sys, json
+import os
+import sys
+import json
 from github import Github
-from openai import OpenAI   # ≥1.0 SDK
+from openai import OpenAI
 
-# ──────────────────────────────────────────────────────────────
+
 def main() -> int:
     # required env vars
     repo_name = os.getenv("GITHUB_REPOSITORY")
@@ -33,7 +35,7 @@ def main() -> int:
     repo = gh.get_repo(repo_name)
     pr   = repo.get_pull(pr_number)
 
-    # OpenRouter client via new openai SDK
+    # OpenRouter client via OpenAI SDK
     client = OpenAI(
         api_key = or_key,
         base_url = "https://openrouter.ai/api/v1"
@@ -42,9 +44,7 @@ def main() -> int:
     issues_found = False
     issues_by_file = {}
 
-    comments, issues_found = [], False
-
-    # iterate changed files
+    # iterate over changed .java files
     for f in pr.get_files():
         if not f.patch or not f.filename.endswith(".java"):
             continue
@@ -63,33 +63,35 @@ issue you find. Return an empty list if there are no issues.
 
 ```java
 {file_content}
-"""
-    try:
-        resp = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages    = [ {"role":"user","content":prompt} ],
-            max_tokens  = 512,
-            temperature = 0,
-        )
-        # feedback = json.loads(resp.choices[0].message.content)
-        raw_output = resp.choices[0].message.content
-        if raw_output.startswith("```"):
-            raw_output = "\n".join(raw_output.split("\n")[1:-1]).strip()
+```"""
 
-        print("Raw model output after cleaning:", raw_output)
-        feedback = json.loads(raw_output)
-        print("Raw model output:", raw_output)  # <-- add this line to debug
-        feedback = json.loads(raw_output)
-    except Exception as e:
-        print(f"❌ OpenRouter call/parsing failed for {f.filename}: {e}")
-        return 1
-    if feedback:
-        issues_found = True
-        issues_by_file.setdefault(f.filename, []).extend(feedback)
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=512,
+                temperature=0,
+            )
+            raw_output = resp.choices[0].message.content.strip()
 
-    # create PR review
+            # Clean markdown backticks if present
+            if raw_output.startswith("```"):
+                raw_output = "\n".join(raw_output.split("\n")[1:-1]).strip()
+
+            print(f"🔎 Raw model output from {f.filename}:\n{raw_output}\n")
+
+            feedback = json.loads(raw_output)
+
+            if feedback:
+                issues_found = True
+                issues_by_file.setdefault(f.filename, []).extend(feedback)
+
+        except Exception as e:
+            print(f"❌ OpenRouter call/parsing failed for {f.filename}: {e}")
+            return 1
+
+    # create PR comment if issues were found
     if issues_found:
-        # Build a single top-level comment listing all issues by file and line
         comment_body = "🔴 **Automated review found issues:**\n\n"
         for filename, issues in issues_by_file.items():
             comment_body += f"**File: `{filename}`**\n"
@@ -102,10 +104,11 @@ issue you find. Return an empty list if there are no issues.
         print("🔴 Comment with issues posted – failing job.")
         return 1
 
-    # No issues found: optionally post a positive comment or skip commenting
+    # no issues
     pr.create_issue_comment("✅ Automated review: no issues found.")
     print("🟢 No issues found.")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
