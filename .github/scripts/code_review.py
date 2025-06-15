@@ -57,13 +57,22 @@ def main() -> int:
             continue
 
         prompt = f"""
-You are a strict Java code-review assistant. Review the code below and output
-ONLY JSON — a list of objects: {{ "line": int, "message": str }} for every
-issue you find. Return an empty list if there are no issues.
+You are a senior Java code reviewer. Analyze the code below and return ONLY a JSON array of objects with this format:
+
+[
+  {{"line": 12, "message": "Avoid using raw types like 'List'. Use generics instead."}},
+  ...
+]
+
+Rules:
+- Focus on best practices, performance, maintainability, and modern Java usage (Java 8+).
+- Point out outdated practices or bad design patterns (like nested loops, magic numbers, duplicate logic, hardcoded values, tight coupling, etc.).
+- Do not write explanations. Just JSON list. Return an empty list [] if nothing is found.
 
 ```java
 {file_content}
 ```"""
+
 
         try:
             resp = client.chat.completions.create(
