@@ -57,21 +57,32 @@ def main() -> int:
             continue
 
         prompt = f"""
-You are a senior Java code reviewer. Analyze the code below and return ONLY a JSON array of objects with this format:
+You are a senior Java code reviewer.
 
+Carefully review the code below. Identify not only syntax and common bugs,
+but also code smells like:
+- improper logging (System.out.println)
+- tight coupling or hardcoded dependencies
+- poor naming
+- missing error handling
+- inefficient logic
+- deprecated APIs
+- violations of SOLID principles
+
+Respond ONLY with a JSON list of objects:
 [
-  {{"line": 12, "message": "Avoid using raw types like 'List'. Use generics instead."}},
+  {{
+    "line": int,
+    "message": str
+  }},
   ...
 ]
 
-Rules:
-- Focus on best practices, performance, maintainability, and modern Java usage (Java 8+).
-- Point out outdated practices or bad design patterns (like nested loops, magic numbers, duplicate logic, hardcoded values, tight coupling, etc.).
-- Do not write explanations. Just JSON list. Return an empty list [] if nothing is found.
+Use line numbers from the code. Return an empty list if there are no issues.
 
 ```java
 {file_content}
-```"""
+"""
 
 
         try:
